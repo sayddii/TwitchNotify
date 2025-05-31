@@ -2,13 +2,15 @@ import os
 import requests
 import time
 from dotenv import load_dotenv
+from threading import Thread
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # Load environment variables
 load_dotenv()
 
 # Configuration
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')  # Your verified chat ID 1076356412
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
 TWITCH_CLIENT_ID = os.getenv('TWITCH_CLIENT_ID')
 TWITCH_OAUTH_TOKEN = f"oauth:{os.getenv('TWITCH_OAUTH_TOKEN')}"
 TWITCH_USER_ID = os.getenv('TWITCH_USER_ID')
@@ -99,29 +101,32 @@ class StreamNotifier:
         except KeyboardInterrupt:
             print("\n🛑 Bot stopped by user")
 
-if __name__ == '__main__':
-    notifier = StreamNotifier()
-    notifier.run()
+def keep_alive():
+    while True:
+        try:
+            if 'RENDER' in os.environ:
+                requests.get(f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}")
+            time.sleep(240)
+        except:
+            pass
 
 if __name__ == '__main__':
-    # For Render.com health checks
-    from http.server import BaseHTTPRequestHandler, HTTPServer
-    class Handler(BaseHTTPRequestHandler):
+    # Health check server for Render
+    PORT = int(os.environ.get("PORT", 8080))
+    
+    class HealthHandler(BaseHTTPRequestHandler):
         def do_GET(self):
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b'Bot is running')
     
-    # Start health check server
-    server = HTTPServer(('0.0.0.0', 8080), Handler)
-    print("🌐 Health check server running on port 8080")
+    server = HTTPServer(('0.0.0.0', PORT), HealthHandler)
+    print(f"🌐 Health server running on port {PORT}")
     
-    # Run in background
-    import threading
-    thread = threading.Thread(target=server.serve_forever)
-    thread.daemon = True
-    thread.start()
+    # Start all components
+    Thread(target=server.serve_forever, daemon=True).start()
+    Thread(target=keep_alive, daemon=True).start()
     
-    # Start main bot
+    # Main bot
     notifier = StreamNotifier()
     notifier.run()
